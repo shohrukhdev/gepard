@@ -1,0 +1,55 @@
+# Environment variables
+.env
+
+# Virtual Environment
+/venv/
+/env/
+/.venv/
+/.env/
+
+# Database files (Common names)
+db.sqlite3
+db.sqlite3-journal
+*.db
+
+# Excel files
+*.xlsx
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Django stuff
+*.log
+local_settings.py
+media/ # Often excluded if user-uploaded media shouldn't be in git
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE files (add more for your specific IDE if needed)
+.idea/
+.vscode/

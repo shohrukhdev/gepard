@@ -1,0 +1,152 @@
+{% load static %}
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<script>
+
+  function onAdd() {
+    const dona = document.getElementById('donaQuantity');
+    const currentValue = Number(dona.value);
+    console.log(currentValue)
+    dona.value = currentValue + 1;
+    console.log(dona.value)
+    calculateTotal();
+  }
+  function onRemove() {
+    const dona = document.getElementById('donaQuantity');
+    if (Number(dona.value) > 1) {
+      dona.value = Number(dona.value) - 1;
+      calculateTotal();
+    }
+  }
+
+  function onAddPachka() {
+    const pachka = document.getElementById('pachkaQuantity');
+    pachka.value = parseInt(pachka.value) + 1;
+    calculateTotal();
+  }
+  function onRemovePachka() {
+    const pachka = document.getElementById('pachkaQuantity');
+    if (parseInt(pachka.value) > 1) {
+      pachka.value = parseInt(pachka.value) - 1;
+      calculateTotal();
+    }
+  }
+
+  function calculateTotal() {
+    const dona = document.getElementById('donaQuantity');
+    const pachka = document.getElementById('pachkaQuantity');
+    const totalUsd = document.getElementById('totalUsd');
+    const totalUzs = document.getElementById('totalUzs');
+
+    totalUsd.innerText = (Number(dona.value) * parseFloat("{{product.price_usd}}"));
+    totalUzs.innerText = (Number(dona.value) * parseFloat("{{product.price_uzs}}"));
+  }
+
+  onAddProductBacket = () => {
+    const dona = document.getElementById('donaQuantity');
+    const pachka = document.getElementById('pachkaQuantity');
+    const totalUsd = document.getElementById('totalUsd');
+    const totalUzs = document.getElementById('totalUzs');
+
+    const product = {
+      id: 1,
+      name: 'Product name',
+      qty: dona.value,
+      priceUzs: 2000,
+      priceUsd: 2,
+    };
+
+    const products = JSON.parse(localStorage.getItem('product')) || [];
+    const productIndex = products.findIndex((p) => p.id === product.id);
+    if (productIndex !== -1) {
+      products[productIndex] = product;
+    } else {
+      products.push(product);
+    }
+    localStorage.setItem('product', JSON.stringify(products));
+    alert('Product added to backet');
+  }
+</script>
+
+<body>
+  <h1 class="text-3xl font-bold underline">
+  </h1>
+  <main class="mx-auto" style="max-width: 600px;">
+    <div class="wrapper px-4 pt-4 relative border-2 shadow-2xl border-gray-100">
+      <header class="flex justify-between h-10">
+        <img src="{% static 'assets/png/logo.jpg' %}" alt="">
+        DST
+        <div class="relative">
+          <a href="{% url "cart" %}">
+            <img class="h-8 w-8 rounded-full" src="{% static 'assets/png/backet.png' %}" alt="Profil woman">
+          </a>
+        </div>
+      </header>
+      <div class="mt-5">
+        <div class="mx-auto w-full">
+          <div class="flex justify-between items-center mt-3">
+            <a href="{% url "list" %}" style="display: flex;">
+              <h2 class="text-lg font-bold flex items-center justify-between mb-3">
+                  <span> <img src="{% static 'assets/png/arrow-left.png' %}" alt=""></span>
+                  <span class="ml-2">Ortga qaytish</span>
+              </h2>
+            </a>
+
+            <a href="#" class="text-orange-500"></a>
+          </div>
+          <div class="flex flex-col">
+            <img class="w-full" style="height: 500px; object-fit: contain;" src="{{product.cover.url}}" alt="">
+            <h2 class="mt-2 font-bold">{{product.title}}</h2>
+            {% comment %} <h2 class="font-bold">{{product.id}}:</h2> {% endcomment %}
+            <h2 class="text-gray-600">Narxi: ${{product.price_usd}}</h2>
+            <h2 class="text-gray-600">Narxi: {{product.price_uzs}} so'm</h2>
+            <div class="card mt-2">
+              <div class="card-body bg-gray-200 rounded-lg p-3 m-0">
+                <h2 class="font-bold">Mahsulot haqida</h2>
+                <p>{{product.description}}
+                </p>
+              </div>
+            </div>
+            <h2 class="mt-2 text-orange-500">Omborda: {{product.amount}} ta</h2>
+          </div>
+          <hr class="mt-2">
+         
+          <div class="flex justify-between mt-1 items-center">
+            <h1>Dona</h1>
+            <!-- minus and plus button to add product to backet -->
+            <div class="flex items-center justify-between">
+              <button onclick="onRemove()" id="pachka" class="bg-gray-200 p-2 px-4 rounded-lg ml-2">-</button>
+              <input type="number" value="0" id="donaQuantity" class="w-32 bg-gray-200 p-2 px-4 rounded-lg  ml-2">
+              <button onclick="onAdd()" id="dona" class="bg-gray-200 p-2 px-4 rounded-lg  ml-2">+</button>
+            </div>
+          </div>
+          <hr class="mt-1">
+          <!-- Total -->
+          <div class="flex justify-between mt-1 items-center">
+            <h1>Umumiy</h1>
+            <h1 class="font-bold">$<span id="totalUsd">0</span></h1>
+          </div>
+          <div class="flex justify-between mt-1 items-center">
+            <h1></h1>
+            <h1 class="font-bold"><span id="totalUzs">0</span> so'm</h1>
+          </div>
+          <hr class="mt-2">
+          <div class="flex justify-between items-center mb-2">
+            <a class="bg-gray-200 w-full p-2 px-4 rounded-lg mt-2 m-2 text-center" href="{% url "list" %}" style="display: inline-block;">
+              Bekor qilish
+            </a>
+            <button class="bg-orange-500 w-full text-white p-2 px-4 rounded-lg m-2" onclick="onAddProductBacket()">Savatga qo'shish</button>
+          </div>
+        </div>
+  </main>
+
+</body>
+
+</html>

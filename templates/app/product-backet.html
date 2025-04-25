@@ -1,0 +1,141 @@
+{% load static %}
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body>
+  <h1 class="text-3xl font-bold underline">
+  </h1>
+  <main class="mx-auto" style="max-width: 600px;">
+    <div class="wrapper px-4 pt-4 relative border-2 shadow-2xl border-gray-100">
+      <header class="flex justify-between h-10">
+        <img src="{% static 'assets/png/logo.jpg' %}" alt="">
+        DST
+        <div class="relative">
+          <img class="h-8 w-8 rounded-full" src="{% static 'assets/png/backet.png' %}" alt="Profil woman">
+        </div>
+      </header>
+      <div class="mt-3">
+        <div class="mx-auto w-full">
+          <div class="flex justify-between items-center mt-3 mb-3">
+            <h2 class="text-lg font-bold flex items-center justify-center">
+              <span class="">Savatcha</span>
+            </h2>
+            <!-- circle close button -->
+            <span class=" right-0 text-gray-500 inset-y-0   flex items-center">
+              <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="15" y1="9" x2="9" y2="15"></line>
+                <line x1="9" y1="9" x2="15" y2="15"></line>
+              </svg>
+          </div>
+          <div class="flex flex-col">
+            <hr class="mt-2 mb-2">
+            <div class="flex justify-between items-center">
+              <div class="flex">
+                <img src="./assets/./png/image-detail.png" class="w-20 rounded-lg" alt="">
+                <div class="ml-2">
+                  <h1 class="font-bold">Product name</h1>
+                  <h1 class="text-gray-600">Narxi: $2</h1>
+                  <h1 class="text-gray-600">Narxi: 20 000 so'm</h1>
+                </div>
+              </div>
+              <img src="./assets/png/remove-button.png" alt="">
+            </div>
+            <div class="flex justify-between items-center">
+              <h1>Jami</h1>
+              <div class="flex flex-col">
+                <h1>$.35</h1>
+                <h1>35 000 so'm</h1>
+              </div>
+              <div class="flex items-center justify-between">
+                <button class="bg-gray-200 p-2 px-4 rounded-lg ml-2">-</button>
+                <span class="bg-gray-200 p-2 px-4 rounded-lg  ml-2">1</span>
+                <button class="bg-gray-200 p-2 px-4 rounded-lg  ml-2">+</button>
+              </div>
+            </div>
+          </div>
+          <hr class="mt-2">
+
+          <div class="flex flex-col">
+            <hr class="mt-2 mb-2">
+            <div class="flex justify-between items-center">
+              <div class="flex">
+                <img src="./assets/./png/image-detail.png" class="w-20 rounded-lg" alt="">
+                <div class="ml-2">
+                  <h1 class="font-bold">Product name</h1>
+                  <h1 class="text-gray-600">Narxi: $2</h1>
+                  <h1 class="text-gray-600">Narxi: 20 000 so'm</h1>
+                </div>
+              </div>
+              <img src="./assets/png/remove-button.png" alt="">
+            </div>
+            <div class="flex justify-between items-center">
+              <h1>Jami</h1>
+              <div class="flex flex-col">
+                <h1>$.35</h1>
+                <h1>35 000 so'm</h1>
+              </div>
+              <div class="flex items-center justify-between">
+                <button class="bg-gray-200 p-2 px-4 rounded-lg ml-2">-</button>
+                <span class="bg-gray-200 p-2 px-4 rounded-lg  ml-2">1</span>
+                <button class="bg-gray-200 p-2 px-4 rounded-lg  ml-2">+</button>
+              </div>
+            </div>
+          </div>
+          <hr class="mt-2">
+
+          <div class="flex flex-col">
+            <hr class="mt-2 mb-2">
+            <div class="flex justify-between items-center">
+              <div class="flex">
+                <img src="./assets/./png/image-detail.png" class="w-20 rounded-lg" alt="">
+                <div class="ml-2">
+                  <h1 class="font-bold">Product name</h1>
+                  <h1 class="text-gray-600">Narxi: $2</h1>
+                  <h1 class="text-gray-600">Narxi: 20 000 so'm</h1>
+                </div>
+              </div>
+              <img src="./assets/png/remove-button.png" alt="">
+            </div>
+            <div class="flex justify-between items-center">
+              <h1>Jami</h1>
+              <div class="flex flex-col">
+                <h1>$.35</h1>
+                <h1>35 000 so'm</h1>
+              </div>
+              <div class="flex items-center justify-between">
+                <button class="bg-gray-200 p-2 px-4 rounded-lg ml-2">-</button>
+                <span class="bg-gray-200 p-2 px-4 rounded-lg  ml-2">1</span>
+                <button class="bg-gray-200 p-2 px-4 rounded-lg  ml-2">+</button>
+              </div>
+            </div>
+          </div>
+          <hr class="mt-2">
+
+          <!-- Total -->
+          <div class="flex justify-between mt-1 items-center">
+            <h1>Total</h1>
+            <h1 class="font-bold">3.5 $</h1>
+          </div>
+          <div class="flex justify-between mt-1 items-center">
+            <h1></h1>
+            <h1 class="font-bold"> 35 000 so'm</h1>
+          </div>
+          <hr class="mt-2">
+          <div class="flex justify-between items-center mb-2">
+            <button class="bg-gray-200 w-full p-2 px-4 rounded-lg mt-2 m-2">Cancel</button>
+            <button class="bg-orange-500 w-full text-white p-2 px-4 rounded-lg m-2">Buy</button>
+          </div>
+        </div>
+  </main>
+
+</body>
+
+</html>

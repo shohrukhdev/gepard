@@ -1,0 +1,108 @@
+{% load humanize %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Template</title>
+</head>
+<body>
+    <style>
+        @page { size: A4 portrait; }
+        * {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            font-size: 12px;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        .headers{
+            display: grid;
+            grid-template-columns: auto auto;
+            columns: #555;
+        }
+        .headers ul li{
+            margin-bottom: 10px;
+            list-style: none;
+            margin-left: 0;
+            font-weight: 500;
+            margin-right: 0;
+        }
+        table{
+            width: 100%;
+        }
+        table, th, td {
+            border: 1px solid black;
+            border-collapse: collapse;
+            padding: 10px;
+        }
+        thead{
+            text-align: center;
+            background-color: #efefef;
+        }
+        tfoot {
+            background-color: #efefef !important;
+        }
+        tbody tr td:first-child {
+            text-align: right;
+        }
+        tfoot tr th:first-child{
+            text-align: right;
+        }
+        .footer {
+            margin-top: 20px;
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: auto auto;
+        }
+        .liner {
+            margin-bottom: 20px;
+        }
+    </style>
+    <div class="headers">
+        <ul>
+            <li>Полъзователи: {{data.users}}</li>
+            <li>Экспедитор:</li>
+        </ul>
+
+        <ul>
+        </ul>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Название</th>
+                <th>Количество в блоке</th>
+                <th>Блок</th>
+                <th>Кол-во</th>
+                <th>Сумма</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in data.items %}
+            <tr>
+                <td>{{forloop.counter}}</td>
+                <td>{{item.title}}</td>
+                <td>{{item.product_in_set}}</td>
+                <td>
+                    {{item.set_amount}} Коробка {{item.case}} шт.
+                </td>
+                <td>{{item.qty|intcomma}}</td>
+                <td>{{item.price_uzs|intcomma}}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr style="background-color: #efefef;">
+                <th colspan="4">ИТОГО</th>
+                <th>{{data.total_qty|intcomma}}</th>
+                <th>{{data.total_sum|intcomma}}</th>
+            </tr>
+        </tfoot>
+    </table>
+
+
+</body>
+</html>
