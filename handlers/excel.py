@@ -19,6 +19,9 @@ def fetch_products(cat):
 
 # Function to generate Excel file from Product data
 async def generate_excel_file(cat):
+    from bot.models import TelegramUser
+    file_name = TelegramUser.UserCategory(cat).label
+
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Products"
@@ -34,16 +37,26 @@ async def generate_excel_file(cat):
         sheet.append([product.get("id"), product.get("title"), product.get("price_uzs")])
 
     # Save the workbook to a temporary file
-    file_path = os.path.join(settings.BASE_DIR, "products.xlsx")
+    file_path = os.path.join(settings.BASE_DIR, f"{file_name}.xlsx")
     workbook.save(file_path)
 
-    return file_path
+    return file_path, file_name
 
 # Bot handler to send the Excel file
 async def send_excel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Generate the Excel file
     category = update.callback_query.data
-    file_path = await generate_excel_file(category)
+    file_path, file_name = await generate_excel_file(category)
+
+    translations = {
+        "-4%": "-4% price",
+        "-2%": "-2% price",
+        "Стандарт": "Standard",
+        "Хорека": "Xoreka",
+        "Оптовик": "Optom price",
+    }
+
+    file_name_in_english = translations.get(file_name, file_name)
 
     await update.callback_query.answer()
     await update.callback_query.message.reply_text("Файл создается...")
@@ -53,8 +66,8 @@ async def send_excel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with open(file_path, 'rb') as file:
         await context.bot.send_document(
             chat_id=update.effective_chat.id,  # Send to the chat where the command was received
-            document=InputFile(file, filename="products.xlsx"),  # Opened file as InputFile
-            caption="Here is the list of products."  # Optional caption
+            document=InputFile(file, filename=f"{file_name}.xlsx"),  # Opened file as InputFile
+            caption=f"Here is the list of {file_name_in_english} products."  # Optional caption
         )
 
     # Optionally, delete the file if it's a temporary file

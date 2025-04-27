@@ -15,16 +15,20 @@ from django.db.models import Q
 
 async def fetch_clients(territories, search):
     # Wrap the ORM operation with sync_to_async
-    return await sync_to_async(lambda: list(TelegramUser.objects.filter(
-        territory__in=territories, 
-        is_agent=False, 
-        is_active=True, 
-        first_name__icontains=search)))()
+    return await sync_to_async(
+        lambda: list(
+            TelegramUser.objects.filter(
+                Q(first_name__icontains=search) | Q(tin__icontains=search),
+                territory__in=territories,
+                is_agent=False,
+                is_active=True
+            )
+        )
+    )()
 
 @get_user
 async def web_app_data(update: Update, context: CallbackContext, user: TelegramUser) -> None:
     data = json.loads(update.effective_message.web_app_data.data)
-    print(data)
 
     if not user.is_agent:
         await update.message.reply_html(
@@ -34,7 +38,6 @@ async def web_app_data(update: Update, context: CallbackContext, user: TelegramU
         return -1
     latitude = data.get('latitude')
     longitude = data.get('longitude')
-    print("LANG", latitude, "LONG", longitude)
 
     if not longitude or not latitude:
         await update.message.reply_text(
@@ -106,11 +109,7 @@ async def get_agent_client(update, context, user):
         await update.message.reply_text(message, reply_markup=replies.get_agent_main())
         return -1
 
-    # delete_message = await update.message.reply_text(".", reply_markup=ReplyKeyboardRemove())
-    # await delete_message.delete()
-
-    # message = "Выберите клиента"
-    message = "Поиск по имени клиента"
+    message = "Поиск по имени клиента / ИНН клиента"
     await update.message.reply_text(message, reply_markup=replies.get_back_ru())
     context.user_data["client_for_order"] = True
 

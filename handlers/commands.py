@@ -1,3 +1,4 @@
+from bot.utils import send_telegram_message
 from utils import get_user
 from telegram import ReplyKeyboardMarkup
 from keyboards import replies
@@ -10,9 +11,8 @@ load_dotenv()
 
 
 @get_user
-async def start(update, context, user):
+async def start(update, context, user, *args):
     message = "Здравствуйте, добро пожаловать в наш бот. \nВыберите нужную услугу."
-
     if user.is_agent:
         return await update.message.reply_text(
             message, reply_markup=replies.get_agent_main()
@@ -22,9 +22,11 @@ async def start(update, context, user):
 
 
 @get_user
-async def category(update, context, user):
+async def category(update, context, user, *args):
+    text = f"/category user, {user}, is_agent ?: {user.is_agent}, id, {user.id}"
+    send_telegram_message(text)
     if not user.is_agent:
-        return await start(update, context, user)
+        return await start(update, context, user, *args)
     
     base_url = os.environ.get("WEBAPP")
     keyboard = InlineKeyboardMarkup(

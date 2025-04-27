@@ -1,6 +1,6 @@
 from django.http import HttpResponse
 from django.template.loader import render_to_string
-# from weasyprint import HTML, CSS
+from weasyprint import HTML, CSS
 from .models import Order
 from PyPDF2 import PdfMerger
 import io

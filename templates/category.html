@@ -141,8 +141,9 @@
             </form>
         </div>
 
-        <div class="p-2 w-100">
+        <div class="p-2 w-100 d-flex justify-content-between">
             <a href="{% url "list" %}?user_id={{user_id}}&cate={{cate}}&preview={{prev_val}}" class="link">Главное меню</a>
+            <button class="back-btn" onclick="history.back()">Назад</button>
         </div>
 
         <div class="products mt-2 p-3">

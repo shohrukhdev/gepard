@@ -143,8 +143,9 @@
          
         </div>
 
-        <div class="p-2 w-100">
+        <div class="p-2 w-100 d-flex justify-content-between">
             <a href="{% url "list" %}?user_id={{user_id}}&cate={{cate}}&preview={{prev_val}}" class="link">Главное меню</a>
+            <button class="back-btn" onclick="history.back()">Назад</button>
         </div>
 
         <div class="products mt-2 p-3">
@@ -210,27 +211,7 @@
                             <input type="hidden" name="productCover" class="productCover" value="{% static 'assets/png/picture.png' %}">
                         {% endif %}
                         <input type="hidden" name="productSetAmount" class="productSetAmount" value="{{product.set_amount}}">
-                        <button onclick="decreaseQuantity('{{product.id}}')">-</button>
-                        <input type="text" class="amountOfProduct" value="0">
-                        {% if product.amount %}
-                            <button
-                                data-item-id="{{product.id}}"
-                                data-item-name="{{product.title}}"
-                                data-item-price-uzs="{{product.price_uzs}}"
-                                data-item-cover="{{product.cover.url}}"
-                                data-item-set="{{product.set_amount}}"
-                                data-item-amount="{{ product.amount }}"
-                                class="add-cart">+</button>
-                        {% else %}
-                            <button
-                                data-item-id="{{product.id}}"
-                                data-item-name="{{product.title}}"
-                                data-item-price-uzs="{{product.price_uzs}}"
-                                data-item-cover="{% static 'assets/png/picture.png' %}"
-                                data-item-set="{{product.set_amount}}"
-                                data-item-amount="{{ product.amount }}"
-                                class="add-cart">+</button>
-                        {% endif %}
+                        <input type"text", class="amountOfProduct" value="0" readonly style="margin-left: 55px">
                     </div>
                 </div>
             </div>

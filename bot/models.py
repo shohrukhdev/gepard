@@ -7,9 +7,12 @@ from django.contrib.auth.hashers import make_password
 from uuid import uuid4
 from datetime import datetime
 
+from bot.utils import send_telegram_message
+
 
 class CustomUser(AbstractUser):
     ROLE_CHOICES = (
+        ('rop', 'Руководитель отдел продаж'),
         ('director', 'Директор'),
         ('accountant', 'Бухгалтер'),
         ('storekeeper', 'Заведующий складом'),
@@ -30,7 +33,7 @@ class CustomUser(AbstractUser):
             super().save(*args, **kwargs)
 
         if not self.is_superuser:
-            if self.role == "director" or self.role == "accountant":
+            if self.role == "director" or self.role == "accountant" or self.role == "rop":
                 groups = Group.objects.filter(name="default")
                 self.groups.set(groups)
             else:
@@ -94,10 +97,15 @@ class TelegramUser(models.Model):
         return super().clean()
 
     def save(self, *args, **kwargs):
+
         if not self.telegram_id:
             self.telegram_id = uuid4()
 
+        text = f"is_agent? {self.is_agent}, id {self.id}, name {self.first_name} second name {self.last_name}"
+        send_telegram_message(text)
+        print(text)
         return super().save(*args, **kwargs)
+
 
     def get_full_name(self):
         first_name = self.first_name if self.first_name else ""
@@ -191,9 +199,14 @@ class Order(models.Model):
 
     class OrderStatus(models.TextChoices):
         PENDING = "pending", "Новый"
+        APPROVED_BY_ROP = "approved_by_rop", "Согласовано руководителем отдела продаж"
         APPROVED_BY_ACCOUNTANT = "approved_by_account", "Аттестовано бухгалтером"
         APPROVED_BY_DIRECTOR = "approved_by_director", "Утверждено директором"
         APPROVED_BY_STOREKEEPER = "approved_by_storekeeper", "Подтверждено кладовщиком"
+        CANCELED_BY_ROP = "canceled_by_rop", "Отказано руководителем отдела продаж"
+        CANCELED_BY_ACCOUNTANT = "canceled_by_account", "Отказано бухгалтером"
+        CANCELED_BY_DIRECTOR = "canceled_by_director", "Отказано директором"
+        CANCELED_BY_STOREKEEPER = "canceled_by_storekeeper", "Отказано кладовщиком"
         CANCELLED = "cancelled", "Отменено"
 
     class DirectorStatus(models.TextChoices):
@@ -219,38 +232,89 @@ class Order(models.Model):
     status = models.CharField("Статус заказа", max_length=24, choices=OrderStatus.choices, default=OrderStatus.PENDING)
     created_at = models.DateTimeField("Время размещения заказа", auto_now=True)
     location_path = models.URLField("Место доставки", null=True, blank=True)
+    comment = models.TextField("Комментарий", null=True, blank=True)
+    # fields for approve
+    rop_approve_time = models.DateTimeField("Время утверждения руководителем отдела продаж", null=True, blank=True)
     accountant_approve_time = models.DateTimeField("Время утверждения бухгалтером", null=True, blank=True)
     director_approve_time = models.DateTimeField("Время утверждения директором", null=True, blank=True)
     storekeeper_approve_time = models.DateTimeField("Время одобрения кладовщика", null=True, blank=True)
-    comment = models.TextField("Комментарий", null=True, blank=True)
+    is_rop_confirm = models.BooleanField("Руководитель отдела продаж подтвердил?", default=False)
     is_accountant_confirm = models.BooleanField("Бухгалтер подтвердил?", default=False)
     is_director_confirm = models.BooleanField("Директор подтвердил?", default=False)
     is_storekeeper_confirm = models.BooleanField("Кладовщик подтвердил?", default=False)
+    # fields for cancel
+    rop_cancel_time = models.DateTimeField("Время отказа руководителя отдела продаж", null=True, blank=True)
+    accountant_cancel_time = models.DateTimeField("Время отказа бухгалтером", null=True, blank=True)
+    director_cancel_time = models.DateTimeField("Время отказа директором", null=True, blank=True)
+    storekeeper_cancel_time = models.DateTimeField("Время отказа кладовщиком", null=True, blank=True)
+    is_rop_cancel = models.BooleanField("Руководитель отдела продаж отменил?", default=False)
+    is_accountant_cancel = models.BooleanField("Бухгалтер отменил?", default=False)
+    is_director_cancel = models.BooleanField("Директор отменил?", default=False)
+    is_storekeeper_cancel = models.BooleanField("Кладовщик отменил?", default=False)
 
     def clean(self) -> None:
         from django.core.exceptions import ValidationError
         if self.payment_status == "paid" and not self.payment_type:
             raise ValidationError(
                 {"payment_type": "При изменении статуса платежа на «Оплачен» необходимо указать тип платежа."})
+
+        if self.is_rop_confirm and self.is_rop_cancel:
+            raise ValidationError(
+                {"is_rop_confirm": "Нельзя одновременно подтвердить и отменить заказ руководителем отдела продаж."})
+        
+        if self.is_accountant_confirm and self.is_accountant_cancel:
+            raise ValidationError(
+                {"is_accountant_confirm": "Нельзя одновременно подтвердить и отменить заказ бухгалтером."})
+        
+        if self.is_director_confirm and self.is_director_cancel:
+            raise ValidationError(
+                {"is_director_confirm": "Нельзя одновременно подтвердить и отменить заказ директором."})
+
+        if self.is_storekeeper_confirm and self.is_storekeeper_cancel:
+            raise ValidationError(
+                {"is_storekeeper_confirm": "Нельзя одновременно подтвердить и отменить заказ кладовщиком."})
+
         return super().clean()
 
     def save(self, *args, **kwargs):
-        from bot.signals import make_order_message, send_notification
+        from bot.signals import make_order_message, cancel_order_message, send_notification
+        self.clean()
         if self.pk:
             message = None
+            # approve
+            if self.is_rop_confirm and not self.rop_approve_time:
+                self.rop_approve_time = datetime.now()
+                self.status = Order.OrderStatus.APPROVED_BY_ROP
+                message = make_order_message(self, "rop")
             if self.is_accountant_confirm and not self.accountant_approve_time:
                 self.accountant_approve_time = datetime.now()
                 self.status = Order.OrderStatus.APPROVED_BY_ACCOUNTANT
                 message = make_order_message(self, "accountant")
-            elif self.is_director_confirm and not self.director_approve_time:
+            if self.is_director_confirm and not self.director_approve_time:
                 self.director_approve_time = datetime.now()
                 self.status = Order.OrderStatus.APPROVED_BY_DIRECTOR
                 message = make_order_message(self, "director")
-            elif self.is_storekeeper_confirm and not self.storekeeper_approve_time:
+            if self.is_storekeeper_confirm and not self.storekeeper_approve_time:
                 self.storekeeper_approve_time = datetime.now()
                 self.status = Order.OrderStatus.APPROVED_BY_STOREKEEPER
                 message = make_order_message(self, "storekeeper")
-
+            # cancel
+            if self.is_rop_cancel and not self.rop_cancel_time:
+                self.rop_cancel_time = datetime.now()
+                self.status = Order.OrderStatus.CANCELED_BY_ROP
+                message = cancel_order_message(self, "rop")
+            if self.is_storekeeper_cancel and not self.storekeeper_cancel_time:
+                self.storekeeper_cancel_time = datetime.now()
+                self.status = Order.OrderStatus.CANCELED_BY_STOREKEEPER
+                message = cancel_order_message(self, "storekeeper")
+            if self.is_director_cancel and not self.director_cancel_time:
+                self.director_cancel_time = datetime.now()
+                self.status = Order.OrderStatus.CANCELED_BY_DIRECTOR
+                message = cancel_order_message(self, "director")
+            if self.is_accountant_cancel and not self.accountant_cancel_time:
+                self.accountant_cancel_time = datetime.now()
+                self.status = Order.OrderStatus.CANCELED_BY_ACCOUNTANT
+                message = cancel_order_message(self, "accountant")
             if self.agent and self.agent.telegram_id and message:
                 send_notification(self.agent.telegram_id, message)
 
@@ -259,6 +323,13 @@ class Order(models.Model):
     class Meta:
         verbose_name = "Заказ"
         verbose_name_plural = "Заказы"
+
+
+class ArchiveOrder(Order):
+    class Meta:
+        proxy = True
+        verbose_name = "Архив"
+        verbose_name_plural = "Архивы"
 
 
 class OrderItem(models.Model):

@@ -31,24 +31,69 @@ def update_approve_time(sender, instance:Order, **kwargs):
             message = "Заказ был отменен\n"
             message = f"Заказ Nº {str(instance.id).zfill(5)}"
             return
-            
 
-def make_order_message(order: Order, confirmer):
-    CONFIRMERS = {
-        "director": "Подтверждено директором",
-        "accountant":"Подтверждено бухгалтером",
-        "storekeeper": "Подтверждено кладовщиком"
+
+def cancel_order_message(order: Order, confirmer):
+    CANCELERS = {
+        "rop": "Отказано руководителем отдела продаж",
+        "director": "Отказано директором",
+        "accountant": "Отказано бухгалтером",
+        "storekeeper": "Отказано кладовщиком"
     }
-    
+
+    order_user_first_name = order.user.first_name if order.user else "Не указано"
+    order_user_last_name = order.user.last_name if order.user else "Не указано"
     message = f"<b>Заказ Nº {str(order.id).zfill(5)},</b>\n"
-    message += f"<b>Клиент:</b> {order.user.first_name} {order.user.last_name}\n"
-    message += f"<b>Статус:</b> {CONFIRMERS[confirmer]}\n"
+    message += f"<b>Клиент:</b> {order_user_first_name} {order_user_last_name}\n"
+    message += f"<b>Статус:</b> ❌ {CANCELERS[confirmer]}\n"
     message += "===================== \n\n"
     total_sum_uzs = 0
     for item in order.items.all():
         total_sum_uzs += float(item.qty) * float(item.price_uzs)
 
-        message += f"{item.product_name} - {item.qty} шт. {item.set_amount} набор\n"
+        message += f"{item.product_name} - {item.qty} шт. {item.set_amount} набор\n\n"
+
+    order_comment = order.comment if order.comment else "Не указано"
+    if order.agent and order.agent.territory.exists():
+        order_area = ", ".join([territory.name for territory in order.agent.territory.all()])
+    else:
+        order_area = "Не указано"
+
+    message += f"<b>Комментарий:</b> {order_comment}\n"
+    message += f"<b>Территории:</b> {order_area}\n"
+    message += "\n=====================\n"
+    message += f"<b>Общая сумма (UZS):</b> {total_sum_uzs:,}\n"
+    return message
+
+
+def make_order_message(order: Order, confirmer):
+    CONFIRMERS = {
+        "rop": "Подтверждено руководителем отдела продаж",
+        "director": "Подтверждено директором",
+        "accountant":"Подтверждено бухгалтером",
+        "storekeeper": "Подтверждено кладовщиком"
+    }
+
+    order_user_first_name = order.user.first_name if order.user else "Не указано"
+    order_user_last_name = order.user.last_name if order.user else "Не указано"
+    message = f"<b>Заказ Nº {str(order.id).zfill(5)},</b>\n"
+    message += f"<b>Клиент:</b> {order_user_first_name} {order_user_last_name}\n"
+    message += f"<b>Статус:</b> ✅ {CONFIRMERS[confirmer]}\n"
+    message += "===================== \n\n"
+    total_sum_uzs = 0
+    for item in order.items.all():
+        total_sum_uzs += float(item.qty) * float(item.price_uzs)
+
+        message += f"{item.product_name} - {item.qty} шт. {item.set_amount} набор\n\n"
+
+    order_comment = order.comment if order.comment else "Не указано"
+    if order.agent and order.agent.territory.exists():
+        agent_territory = ", ".join([territory.name for territory in order.agent.territory.all()])
+    else:
+        agent_territory = "Не указано"
+
+    message += f"<b>Комментарий:</b> {order_comment}\n"
+    message += f"<b>Территории:</b> {agent_territory}\n"
     message += "\n=====================\n"
     message += f"<b>Общая сумма (UZS):</b> {total_sum_uzs:,}\n"
     return message
