@@ -1,5 +1,7 @@
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+
 from bot import views, pdf_views, price_list
 from django.conf import settings
 from django.conf.urls.static import static
@@ -9,6 +11,10 @@ def trigger_error(request):
     division_by_zero = 1 / 0
 
 
+auth_urlpatterns = [
+    path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+]
 urlpatterns = [
     path('sentry-debug/', trigger_error),
     path('webapp/', views.WebAppTemplateView.as_view(), name="list"),
@@ -20,6 +26,10 @@ urlpatterns = [
     path('generate-multiple-pdfs/', pdf_views.generate_multiple_pdfs_view, name='generate_multiple_pdfs'),
     path('generate-price-list/', price_list.export_products_to_excel, name='generate-excel-price'),
     # path("webapp/cart/", views.WebAppCartPage.as_view(), name="cart")
+
+    path('auth/', include(auth_urlpatterns)),
+
+    path('test/', include('api_test_env.urls')),
 ]
 
 
