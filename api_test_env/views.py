@@ -31,15 +31,25 @@ class NomenclatureUpdateView(APIView):
 
         # --- Basic Validation ---
         client_id = data.get('client_id')
+        client_name = data.get('client_name')
+        customer_tin = data.get('customer_tin')
+        date_arr = data.get('date')
+
         nomenclature = data.get('nomenclature')
         nomenclature_id = nomenclature.get('id') if isinstance(nomenclature, dict) else None
-        goods = nomenclature.get('goods') if isinstance(nomenclature, dict) else None
+        products = nomenclature.get('products') if isinstance(nomenclature, dict) else None
 
-        if not all([client_id, nomenclature, nomenclature_id, isinstance(goods, list)]):
+
+        if not all([
+            client_id,
+            nomenclature,
+            nomenclature_id,
+            isinstance(products, list)]
+        ):
             logger.warning("Nomenclature update: Invalid payload structure.")
             return Response(
                 {"success": False,
-                 "error": "Invalid payload structure. Required fields: client_id, nomenclature (with id and goods list)."},
+                 "error": "Invalid payload structure. Required fields: client_id, nomenclature (with id and products list)."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
