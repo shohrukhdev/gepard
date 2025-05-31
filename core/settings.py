@@ -62,7 +62,8 @@ INSTALLED_APPS = [
     'bot',
     'solo',
     'import_export',
-    'mathfilters'
+    'mathfilters',
+    'integrations',
 ]
 
 MIDDLEWARE = [
