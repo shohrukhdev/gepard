@@ -30,6 +30,8 @@ urlpatterns = [
     path('auth/', include(auth_urlpatterns)),
 
     path('test/', include('api_test_env.urls')),
+
+    path('api/', include('integrations.urls')),
 ]
 
 

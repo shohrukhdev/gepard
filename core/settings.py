@@ -291,3 +291,10 @@ JAZZMIN_SETTINGS = {
     "related_modal_active": False,
     "use_google_fonts_cdn": True,
 }
+
+# Supply API Configuration
+SUPPLY_API_PHONE = 'your_phone_number'
+SUPPLY_API_PASSWORD = 'your_password'
+SUPPLY_BRANCH_ID = 428
+SUPPLY_WAREHOUSE_ID = 287
+
