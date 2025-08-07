@@ -15,7 +15,6 @@ from datetime import datetime
 from .models import Nomenclature, Product, ContrAgent, ContrAgentBalance
 import json
 
-from .utils.supply_send_request import send_nomenclature_to_supply
 
 logger = logging.getLogger(__name__)
 
@@ -133,19 +132,6 @@ class NomenclatureUpdateView(APIView):
                 if products_to_create:
                     Product.objects.bulk_create(products_to_create)
                     logger.info(f"Created {len(products_to_create)} products for nomenclature {nomenclature_id}")
-
-                # Try to send to Supply service
-                try:
-                    # Send asynchronously or in background task for better performance
-                    # For now, we'll do it synchronously
-                    send_result = send_nomenclature_to_supply(nomenclature.id)
-                    if send_result:
-                        logger.info(f"Successfully sent nomenclature {nomenclature_id} to Supply")
-                    else:
-                        logger.warning(f"Failed to send nomenclature {nomenclature_id} to Supply. Will retry later.")
-                except Exception as e:
-                    logger.error(f"Error sending nomenclature to Supply: {str(e)}")
-                    # Continue processing - don't fail the request if Supply integration fails
 
                 # Prepare response
                 response_data = {

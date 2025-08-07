@@ -5,20 +5,20 @@ class Nomenclature(models.Model):
     """"
     Nomenclature object received from 1C service.
     """
-    external_id = models.CharField(max_length=64)
-    client_id = models.CharField(max_length=64, null=True, blank=True)
-    client_name = models.CharField(max_length=128, null=True, blank=True)
-    customer_tin = models.CharField(max_length=20, null=True, blank=True)
-    contract = models.TextField(null=True, blank=True)
-    date = models.DateField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    sent_on = models.DateTimeField(null=True, blank=True)
-    response = models.TextField(null=True, blank=True)
-    sent_successfully = models.BooleanField(default=False)
+    external_id = models.CharField(max_length=64, verbose_name="ID из 1С")
+    client_id = models.CharField(max_length=64, null=True, blank=True, verbose_name="ID клиента")
+    client_name = models.CharField(max_length=128, null=True, blank=True, verbose_name="Название клиента")
+    customer_tin = models.CharField(max_length=20, null=True, blank=True, verbose_name="ИНН клиента")
+    contract = models.TextField(null=True, blank=True, verbose_name="Контракт")
+    date = models.DateField(null=True, blank=True, verbose_name="Дата")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Создано")
+    sent_on = models.DateTimeField(null=True, blank=True, verbose_name="Отправлено")
+    response = models.TextField(null=True, blank=True, verbose_name="Ответ от Supply")
+    sent_successfully = models.BooleanField(default=False, verbose_name="Отправлено успешно")
 
     class Meta:
-        verbose_name = "Nomenclature"
-        verbose_name_plural = "Nomenclatures"
+        verbose_name = "Номенклатура"
+        verbose_name_plural = "Номенклатуры"
         ordering = ['-created_at']
 
     def __str__(self):
@@ -34,16 +34,20 @@ class Product(models.Model):
         on_delete=models.CASCADE,
         related_name="products"
     )
-    code = models.CharField(max_length=32, null=True, blank=True)
-    catalog_code = models.CharField(max_length=32, null=True, blank=True)
-    barcode = models.CharField(max_length=128, null=True, blank=True)
-    package_code = models.CharField(max_length=32, null=True, blank=True)
-    code1c = models.CharField(max_length=32, null=True, blank=True)
-    name = models.CharField(max_length=256, null=True, blank=True)
+    code = models.CharField(max_length=32, null=True, blank=True, verbose_name="Код товара")
+    catalog_code = models.CharField(max_length=32, null=True, blank=True, verbose_name="Код каталога")
+    barcode = models.CharField(max_length=128, null=True, blank=True, verbose_name="Штрихкод")
+    baseSumma = models.IntegerField(null=True, blank=True, verbose_name="Базовая сумма")
+    package_code = models.CharField(max_length=32, null=True, blank=True, verbose_name="Код упаковки")
+    count = models.IntegerField(null=True, blank=True, verbose_name="Количество")
+    summa = models.IntegerField(null=True, blank=True, verbose_name="Сумма")
+    delivery_sum = models.IntegerField(null=True, blank=True, verbose_name="Сумма доставки")
+    code1c = models.CharField(max_length=32, null=True, blank=True, verbose_name="Код 1С")
+    name = models.CharField(max_length=256, null=True, blank=True, verbose_name="Название")
 
     class Meta:
-        verbose_name = "Product"
-        verbose_name_plural = "Products"
+        verbose_name = "Продукт"
+        verbose_name_plural = "Продукты"
         ordering = ['name']
 
     def __str__(self):

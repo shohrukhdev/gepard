@@ -1,314 +1,794 @@
 import json
 import logging
-import time
-from datetime import datetime
 import requests
-from django.conf import settings
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple, Union, Any
+
 from django.db import transaction
+from .supply_auth import SupplyAuthService, create_supply_auth_service
 
-from integrations.utils.supply_auth import create_supply_auth_service
-from integrations.models import Nomenclature, Product
+# Base URL for all API calls
+BASE_URL = "https://apisupply.smartpos.uz"
+BRANCHES_ENDPOINT = "/api/cabinet/v1/branches/lookup"
+WAREHOUSES_ENDPOINT = "/api/cabinet/v1/warehouses/lookup"
+ORDER_CREATE_ENDPOINT = "/api/cabinet/v1/orders/1c"
 
+# Endpoint 5: Send stock-in from Supply to 1C
+STOCK_IN_ENDPOINT = "/api/cabinet/v1/stock-in/1c"
+
+# Endpoint 6: Get electronic invoices (factura) from Supply
+FACTURA_INCOMING_ENDPOINT = "/api/integration/v1/1C/factura/incoming"
+FACTURA_OUTGOING_ENDPOINT = "/api/integration/v1/1C/factura/outgoing"
+
+# Endpoint 7: Get waybills from Supply
+WAYBILL_INCOMING_ENDPOINT = "/api/integration/v1/1C/waybill/incoming"
+WAYBILL_OUTGOING_ENDPOINT = "/api/integration/v1/1C/waybill/outgoing"
+
+# Configure logging
 logger = logging.getLogger(__name__)
 
-# Configuration constants
-SUPPLY_API_BASE_URL = "https://apisupply.smartpos.uz"
-SUPPLY_ORDER_ENDPOINT = "/api/cabinet/v1/orders/1c"
+# Retry settings for API calls
 MAX_RETRIES = 3
 RETRY_DELAY = 2  # seconds
 
 
-# Create auth service with credentials from settings
-def get_auth_service():
-    return create_supply_auth_service(
-        phone=settings.SUPPLY_API_PHONE,
-        password=settings.SUPPLY_API_PASSWORD
-    )
-
-
-def transform_nomenclature_to_supply_order(nomenclature):
+def get_auth_service(phone: Optional[str] = None, password: Optional[str] = None) -> SupplyAuthService:
     """
-    Transform a Nomenclature object into the format required by the Supply API.
+    Get a configured auth service for Supply API.
 
     Args:
-        nomenclature: Nomenclature model instance
+        phone (str, optional): Phone number for authentication. If not provided,
+                              will use environment variables or settings.
+        password (str, optional): Password for authentication. If not provided,
+                                 will use environment variables or settings.
 
     Returns:
-        dict: Data formatted for Supply API
+        SupplyAuthService: Configured auth service instance
     """
-    # Parse contract data
-    contract_data = {}
-    if nomenclature.contract:
-        try:
-            contract_data = json.loads(nomenclature.contract)
-        except json.JSONDecodeError:
-            # If not valid JSON, use as a string
-            contract_data = {
-                "number": nomenclature.contract,
-                "date": datetime.now().strftime("%Y-%m-%d")
-            }
+    # In a real implementation, you would get these from environment variables or Django settings
+    # if not provided explicitly
+    if not phone or not password:
+        from django.conf import settings
+        phone = getattr(settings, 'SUPPLY_API_PHONE', None)
+        password = getattr(settings, 'SUPPLY_API_PASSWORD', None)
 
-    # Get products related to this nomenclature
-    products = Product.objects.filter(nomenclature=nomenclature)
+        if not phone or not password:
+            raise ValueError("Supply API credentials not provided and not found in settings")
 
-    # Format products for Supply API
-    formatted_products = []
-    for product in products:
-        formatted_products.append({
-            "barcode": product.barcode or "",
-            "baseSumma": 0,  # Default value, update based on your business logic
-            "catalogCode": product.catalog_code or "",
-            "catalogName": product.name or "",
-            "hasMark": "false",  # Default value, update based on your business logic
-            "committentTin": "",  # Default value, update based on your business logic
-            "committentName": "",  # Default value, update based on your business logic
-            "committentVatRegCode": "",  # Default value, update based on your business logic
-            "committentVatRegStatus": 0,  # Default value, update based on your business logic
-            "count": 1,  # Default value, update based on your business logic
-            "deliverySum": 0,  # Default value, update based on your business logic
-            "deliverySumWithVat": 0,  # Default value, update based on your business logic
-            "expiryDate": datetime.now().strftime("%Y-%m-%d"),  # Default value
-            "lgotaId": 0,  # Default value, update based on your business logic
-            "lgotaName": "",  # Default value, update based on your business logic
-            "lgotaType": "0",  # Default value, update based on your business logic
-            "lgotaVatSum": 0,  # Default value, update based on your business logic
-            "name": product.name or "",
-            "packageCode": product.package_code or "",
-            "packageName": "",  # Default value, update based on your business logic
-            "profitRate": 0,  # Default value, update based on your business logic
-            "serial": "",  # Default value, update based on your business logic
-            "summa": 0,  # Default value, update based on your business logic
-            "vatRate": "null",  # Default value, update based on your business logic
-            "vatSum": 0,  # Default value, update based on your business logic
-            "code1C": product.code1c or "",
-            "warehouseId": "null"  # Default value, update based on your business logic
-        })
-
-    # Create order payload
-    order_data = {
-        "branchId": settings.SUPPLY_BRANCH_ID,  # Get from settings
-        "contract": {
-            "date": contract_data.get("date", datetime.now().strftime("%Y-%m-%d")),
-            "number": contract_data.get("number", "1")
-        },
-        "createStockIn": True,
-        "customerTin": nomenclature.customer_tin or "",
-        "description": f"Order from 1C: {nomenclature.external_id}",
-        "orderDate": datetime.now().isoformat(timespec='milliseconds') + "Z",
-        "orderNumber": nomenclature.external_id,
-        "advancePaymentPercent": "0",  # Default value, update based on your business logic
-        "advancePaymentAmount": "0",  # Default value, update based on your business logic
-        "specificationDate": datetime.now().isoformat(timespec='milliseconds'),
-        "specificationNumber": f"SPEC-{nomenclature.external_id}",
-        "products": formatted_products,
-        "warehouseId": settings.SUPPLY_WAREHOUSE_ID  # Get from settings
-    }
-
-    return order_data
+    return create_supply_auth_service(phone, password)
 
 
-def send_nomenclature_to_supply(nomenclature_id):
+def get_branches(
+        auth_service: Optional[SupplyAuthService] = None,
+        branch_id: Optional[int] = None
+) -> Tuple[bool, List[Dict[str, Any]]]:
     """
-    Sends a Nomenclature to the Supply service.
+    Endpoint 1: Get list of branches from Supply API.
 
     Args:
-        nomenclature_id: ID of the Nomenclature to send
+        auth_service (SupplyAuthService, optional): Auth service instance.
+                                                   If not provided, a new one will be created.
+        branch_id (int, optional): Filter by specific branch ID
 
     Returns:
-        bool: True if successful, False otherwise
+        Tuple[bool, List[Dict]]: (success, branches list)
     """
-    try:
-        nomenclature = Nomenclature.objects.get(id=nomenclature_id)
-
-        # Skip if already sent successfully
-        if nomenclature.sent_successfully:
-            logger.info(f"Nomenclature {nomenclature.external_id} already sent successfully. Skipping.")
-            return True
-
-        # Get auth service
+    # Get auth service if not provided
+    if not auth_service:
         auth_service = get_auth_service()
 
-        # Transform data for Supply API
-        order_data = transform_nomenclature_to_supply_order(nomenclature)
+    # Build URL
+    url = f"{BASE_URL}{BRANCHES_ENDPOINT}"
+    if branch_id:
+        url += f"?branchId={branch_id}"
 
-        # Send request with retries
-        success, response_data = send_to_supply_with_retry(order_data, auth_service)
+    # Set headers
+    headers = {
+        "Content-Type": "application/json",
+        **auth_service.get_auth_header()
+    }
 
-        # Update Nomenclature with response
-        with transaction.atomic():
-            nomenclature.sent_on = datetime.now()
-            nomenclature.response = json.dumps(response_data)
-            nomenclature.sent_successfully = success
-            nomenclature.save()
+    try:
+        # Make the request
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
 
-        if success:
-            logger.info(f"Successfully sent Nomenclature {nomenclature.external_id} to Supply")
-        else:
-            logger.warning(f"Failed to send Nomenclature {nomenclature.external_id} to Supply: {response_data}")
+        # Process response
+        branches = response.json()
+        return True, branches
 
-        return success
-
-    except Nomenclature.DoesNotExist:
-        logger.error(f"Nomenclature with ID {nomenclature_id} not found")
-        return False
-    except Exception as e:
-        logger.exception(f"Error sending Nomenclature {nomenclature_id} to Supply: {str(e)}")
-        # If an exception occurred, try to update the nomenclature record with the error
-        try:
-            nomenclature = Nomenclature.objects.get(id=nomenclature_id)
-            with transaction.atomic():
-                nomenclature.sent_on = datetime.now()
-                nomenclature.response = json.dumps({
-                    "error": str(e),
-                    "success": False,
-                    "exception_type": type(e).__name__
-                })
-                nomenclature.sent_successfully = False
-                nomenclature.save()
-        except:
-            # If we can't even update the record, just log it
-            logger.exception("Failed to update nomenclature with error details")
-
-        return False
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching branches from Supply API: {str(e)}")
+        return False, []
 
 
-def send_to_supply_with_retry(order_data, auth_service, retries=MAX_RETRIES):
+def get_warehouses(
+        auth_service: Optional[SupplyAuthService] = None,
+        warehouse_id: Optional[int] = None
+) -> Tuple[bool, List[Dict[str, Any]]]:
     """
-    Send data to Supply API with retry mechanism.
+    Endpoint 2: Get list of warehouses from Supply API.
 
     Args:
-        order_data: Formatted data to send
-        auth_service: SupplyAuthService instance
-        retries: Number of retries allowed
+        auth_service (SupplyAuthService, optional): Auth service instance.
+                                                   If not provided, a new one will be created.
+        warehouse_id (int, optional): Filter by specific warehouse ID
 
     Returns:
-        tuple: (success, response_data)
-            - success (bool): Whether the request was successful
-            - response_data (dict): Response data or error information
+        Tuple[bool, List[Dict]]: (success, warehouses list)
     """
-    url = f"{SUPPLY_API_BASE_URL}{SUPPLY_ORDER_ENDPOINT}"
-    attempt = 0
+    # Get auth service if not provided
+    if not auth_service:
+        auth_service = get_auth_service()
 
-    while attempt < retries:
-        attempt += 1
+    # Build URL
+    url = f"{BASE_URL}{WAREHOUSES_ENDPOINT}"
+    if warehouse_id:
+        url += f"?warehouseId={warehouse_id}"
+
+    # Set headers
+    headers = {
+        "Content-Type": "application/json",
+        **auth_service.get_auth_header()
+    }
+
+    try:
+        # Make the request
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+
+        # Process response
+        warehouses = response.json()
+        return True, warehouses
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching warehouses from Supply API: {str(e)}")
+        return False, []
+
+
+def create_order(
+        order_data: Dict[str, Any],
+        auth_service: Optional[SupplyAuthService] = None,
+        max_retries: int = MAX_RETRIES
+) -> Tuple[bool, Union[int, str]]:
+    """
+    Endpoint 3: Create an order in Supply system.
+
+    Args:
+        order_data (Dict): Order data according to the API specification
+        auth_service (SupplyAuthService, optional): Auth service instance.
+                                                   If not provided, a new one will be created.
+        max_retries (int): Maximum number of retry attempts
+
+    Returns:
+        Tuple[bool, Union[int, str]]: (success, order_id or error_message)
+    """
+    # Get auth service if not provided
+    if not auth_service:
+        auth_service = get_auth_service()
+
+    # Validate required fields
+    required_fields = ['branchId', 'customerTin', 'contract', 'orderNumber', 'orderDate', 'products']
+
+    missing_fields = [field for field in required_fields if field not in order_data]
+    if missing_fields:
+        error_msg = f"Missing required fields: {', '.join(missing_fields)}"
+        logger.error(error_msg)
+        return False, error_msg
+
+    # Contract fields validation
+    if 'contract' in order_data:
+        if not isinstance(order_data['contract'], dict):
+            error_msg = "Contract must be an object with 'number' and 'date' fields"
+            logger.error(error_msg)
+            return False, error_msg
+
+        if 'number' not in order_data['contract'] or 'date' not in order_data['contract']:
+            error_msg = "Contract object must contain 'number' and 'date' fields"
+            logger.error(error_msg)
+            return False, error_msg
+
+    # Products validation
+    if not order_data.get('products') or not isinstance(order_data['products'], list) or len(
+            order_data['products']) == 0:
+        error_msg = "Products list is required and must contain at least one product"
+        logger.error(error_msg)
+        return False, error_msg
+
+    # Set defaults
+    if 'createStockIn' not in order_data:
+        order_data['createStockIn'] = True
+
+    # Validate each product has required fields
+    for idx, product in enumerate(order_data['products']):
+        product_required_fields = ['catalogCode', 'barcode', 'baseSumma', 'name', 'packageCode', 'count', 'summa',
+                                   'deliverySum']
+        product_missing_fields = [field for field in product_required_fields if field not in product]
+
+        if product_missing_fields:
+            error_msg = f"Product at index {idx} is missing required fields: {', '.join(product_missing_fields)}"
+            logger.error(error_msg)
+            return False, error_msg
+
+    # Endpoint URL
+    url = f"{BASE_URL}{ORDER_CREATE_ENDPOINT}"
+
+    # Set headers
+    headers = {
+        "Content-Type": "application/json",
+        **auth_service.get_auth_header()
+    }
+
+    # Implement retry logic
+    retry_count = 0
+    while retry_count < max_retries:
         try:
-            # Get auth headers (token will be refreshed if needed)
-            headers = {
-                "Content-Type": "application/json",
-                **auth_service.get_auth_header()
-            }
-
-            logger.debug(f"Sending request to Supply API. Attempt {attempt}/{retries}")
-
-            # Send request
+            # Make the request
             response = requests.post(
                 url,
                 headers=headers,
-                json=order_data,
-                timeout=30  # 30 seconds timeout
+                data=json.dumps(order_data)
             )
 
-            # Try to parse response as JSON
-            response_data = {}
-            try:
-                response_data = response.json()
-            except json.JSONDecodeError:
-                # If not JSON, store as text
-                response_data = {"raw_response": response.text}
+            # If successful, return the order ID
+            if response.status_code == 200:
+                try:
+                    # The response should be just an ID
+                    order_id = response.json()
+                    logger.info(f"Successfully created order in Supply. Order ID: {order_id}")
+                    return True, order_id
+                except json.JSONDecodeError:
+                    # If can't parse JSON but status is 200, consider it a success
+                    logger.warning("Received 200 OK but couldn't parse JSON response")
+                    return True, response.text
 
-            # Add status code to response data for better tracking
-            response_data["status_code"] = response.status_code
-
-            # Handle response based on status code
-            if response.status_code in (401, 403):
-                # Authentication issues, force refresh token and retry
-                logger.warning(f"Authentication failed. Status: {response.status_code}. Refreshing token...")
+            # Handle various error responses
+            if response.status_code == 401:
+                # Token might be expired, refresh and retry
+                logger.warning("Authentication error. Refreshing token and retrying...")
                 auth_service.get_auth_token(force_refresh=True)
-
-                # Store the auth error in response_data
-                response_data["error"] = "Authentication failed, retrying with refreshed token"
-
-                # Continue to next retry attempt
+                retry_count += 1
                 continue
 
-            elif response.status_code >= 400:
-                # Other error responses
-                logger.error(f"Supply API error. Status: {response.status_code}, Response: {response_data}")
+            if response.status_code >= 400:
+                # Try to get error details from response
+                try:
+                    error_details = response.json()
+                    error_msg = f"API error: {response.status_code} - {json.dumps(error_details)}"
+                except json.JSONDecodeError:
+                    error_msg = f"API error: {response.status_code} - {response.text}"
 
-                # If this was the last retry, return the error
-                if attempt >= retries:
-                    return False, {
-                        "success": False,
-                        "status_code": response.status_code,
-                        "error": "Failed after maximum retries",
-                        "response": response_data,
-                        "last_attempt": attempt
-                    }
-
-                # Wait before retrying for non-auth errors
-                time.sleep(RETRY_DELAY * attempt)  # Exponential backoff
-                continue
-
-            # Success response
-            logger.info(f"Supply API response: {response_data}")
-            return True, {
-                "success": True,
-                "status_code": response.status_code,
-                "response": response_data,
-                "attempt": attempt
-            }
+                logger.error(error_msg)
+                return False, error_msg
 
         except requests.exceptions.RequestException as e:
-            # Network or request errors
-            error_message = str(e)
-            logger.error(f"Request error on attempt {attempt}/{retries}: {error_message}")
+            # Network-related errors
+            error_msg = f"Request error: {str(e)}"
+            logger.error(error_msg)
+            retry_count += 1
 
-            # If this was the last attempt, return the error
-            if attempt >= retries:
-                return False, {
-                    "success": False,
-                    "error": error_message,
-                    "error_type": type(e).__name__,
-                    "last_attempt": attempt
-                }
+            if retry_count >= max_retries:
+                return False, error_msg
 
-            # Wait before retrying
-            time.sleep(RETRY_DELAY * attempt)  # Exponential backoff
-
-    # Should not reach here, but just in case
-    return False, {
-        "success": False,
-        "error": f"Failed to send data to Supply API after {retries} attempts",
-        "last_attempt": attempt
-    }
+    # If we get here, all retries failed
+    return False, "Maximum retry attempts reached"
 
 
-def process_pending_nomenclatures(max_count=50):
+def send_stock_in_to_1c(
+        stock_in_data: Dict[str, Any],
+        auth_service: Optional[SupplyAuthService] = None,
+        one_c_url: Optional[str] = None,
+        one_c_username: Optional[str] = None,
+        one_c_password: Optional[str] = None,
+        max_retries: int = MAX_RETRIES
+) -> Tuple[bool, Dict[str, Any]]:
     """
-    Process nomenclatures that haven't been sent to Supply yet or failed previously.
+    Endpoint 5: Send stock-in (receipt) data from Supply to 1C.
+
+    This function sends completed receipt data from Supply to 1C system.
 
     Args:
-        max_count: Maximum number of nomenclatures to process
+        stock_in_data (Dict): Stock-in data according to the API specification
+        auth_service (SupplyAuthService, optional): Auth service instance for Supply.
+                                                   If not provided, a new one will be created.
+        one_c_url (str, optional): URL to 1C system API endpoint.
+                                  If not provided, will use settings.
+        one_c_username (str, optional): Username for 1C authentication.
+                                       If not provided, will use settings.
+        one_c_password (str, optional): Password for 1C authentication.
+                                       If not provided, will use settings.
+        max_retries (int): Maximum number of retry attempts
 
     Returns:
-        tuple: (success_count, fail_count)
+        Tuple[bool, Dict[str, Any]]: (success, response_data)
     """
-    pending_nomenclatures = Nomenclature.objects.filter(
-        sent_successfully=False
-    ).order_by('created_at')[:max_count]
+    # Get auth service if not provided
+    if not auth_service:
+        auth_service = get_auth_service()
 
-    success_count = 0
-    fail_count = 0
+    # Get 1C credentials if not provided
+    if not one_c_url or not one_c_username or not one_c_password:
+        from django.conf import settings
+        one_c_url = getattr(settings, 'ONE_C_RECEIPT_URL',
+                            None) or "https://1c-server/hs/ReceiptGoodsServices/GetAdmission"
+        one_c_username = getattr(settings, 'ONE_C_USERNAME', None)
+        one_c_password = getattr(settings, 'ONE_C_PASSWORD', None)
 
-    for nomenclature in pending_nomenclatures:
+        if not one_c_username or not one_c_password:
+            error_msg = "1C credentials not provided and not found in settings"
+            logger.error(error_msg)
+            return False, {"error": error_msg}
+
+    # Validate required fields
+    required_fields = ['facturaId', 'facturaNo', 'facturaDate', 'status', 'statusName', 'id', 'products']
+
+    missing_fields = [field for field in required_fields if field not in stock_in_data]
+    if missing_fields:
+        error_msg = f"Missing required fields: {', '.join(missing_fields)}"
+        logger.error(error_msg)
+        return False, {"error": error_msg}
+
+    # Products validation
+    if not stock_in_data.get('products') or not isinstance(stock_in_data['products'], list) or len(
+            stock_in_data['products']) == 0:
+        error_msg = "Products list is required and must contain at least one product"
+        logger.error(error_msg)
+        return False, {"error": error_msg}
+
+    # Validate each product has required fields
+    for idx, product in enumerate(stock_in_data['products']):
+        product_required_fields = ['barcode', 'basePrice', 'hasMark', 'name', 'purchasePrice',
+                                   'purchasePriceWithoutVat',
+                                   'qty', 'sellingPrice', 'sellingPriceWithoutVat', 'stockProductId',
+                                   'stockProductName',
+                                   'unitId', 'vatBarCode', 'vatRate']
+
+        product_missing_fields = [field for field in product_required_fields if field not in product]
+
+        if product_missing_fields:
+            error_msg = f"Product at index {idx} is missing required fields: {', '.join(product_missing_fields)}"
+            logger.error(error_msg)
+            return False, {"error": error_msg}
+
+    # Supply API endpoint
+    supply_url = f"{BASE_URL}{STOCK_IN_ENDPOINT}"
+
+    # Set headers for Supply API
+    supply_headers = {
+        "Content-Type": "application/json",
+        **auth_service.get_auth_header()
+    }
+
+    # Prepare for 1C API call
+    from requests.auth import HTTPBasicAuth
+    one_c_auth = HTTPBasicAuth(one_c_username, one_c_password)
+    one_c_headers = {
+        "Content-Type": "application/json"
+    }
+
+    # Implement retry logic
+    retry_count = 0
+    while retry_count < max_retries:
         try:
-            result = send_nomenclature_to_supply(nomenclature.id)
-            if result:
-                success_count += 1
-            else:
-                fail_count += 1
-        except Exception as e:
-            logger.exception(f"Error processing nomenclature {nomenclature.id}: {str(e)}")
-            fail_count += 1
+            # Make the request to Supply first
+            supply_response = requests.post(
+                supply_url,
+                headers=supply_headers,
+                data=json.dumps(stock_in_data)
+            )
 
-    return success_count, fail_count
+            supply_response.raise_for_status()
+
+            # If successful, now send to 1C
+            one_c_response = requests.post(
+                one_c_url,
+                auth=one_c_auth,
+                headers=one_c_headers,
+                data=json.dumps(stock_in_data)
+            )
+
+            # Check 1C response
+            if one_c_response.status_code == 200:
+                try:
+                    response_data = one_c_response.json()
+                    logger.info(f"Successfully sent stock-in data to 1C. Stock-in ID: {stock_in_data['id']}")
+                    return True, response_data
+                except json.JSONDecodeError:
+                    # If can't parse JSON but status is 200, consider it a success
+                    logger.warning("Received 200 OK from 1C but couldn't parse JSON response")
+                    return True, {"raw_response": one_c_response.text}
+
+            # Handle various error responses from 1C
+            if one_c_response.status_code == 401:
+                error_msg = "Authentication error with 1C system"
+                logger.error(error_msg)
+                return False, {"error": error_msg}
+
+            if one_c_response.status_code >= 400:
+                # Try to get error details from response
+                try:
+                    error_details = one_c_response.json()
+                    error_msg = f"1C API error: {one_c_response.status_code} - {json.dumps(error_details)}"
+                except json.JSONDecodeError:
+                    error_msg = f"1C API error: {one_c_response.status_code} - {one_c_response.text}"
+
+                logger.error(error_msg)
+                return False, {"error": error_msg}
+
+        except requests.exceptions.RequestException as e:
+            # Network-related errors
+            error_msg = f"Request error: {str(e)}"
+            logger.error(error_msg)
+            retry_count += 1
+
+            if retry_count >= max_retries:
+                return False, {"error": error_msg}
+
+    # If we get here, all retries failed
+    return False, {"error": "Maximum retry attempts reached"}
+
+
+def get_facturas(
+        tin: str,
+        direction: str = "incoming",
+        status: Optional[str] = None,
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+        page: int = 0,
+        size: int = 20,
+        order_by: str = "id",
+        sort_order: str = "desc",
+        search: Optional[str] = None,
+        auth_service: Optional[SupplyAuthService] = None
+) -> Tuple[bool, Dict[str, Any]]:
+    """
+    Endpoint 6: Get electronic invoices (facturas) from Supply.
+
+    Args:
+        tin (str): TIN of the company
+        direction (str): "incoming" or "outgoing"
+        status (str, optional): Filter by status (DRAFT, SENT, QUEUED, etc.)
+        from_date (str, optional): Start date in format YYYY-MM-DDTHH:MM:SS
+        to_date (str, optional): End date in format YYYY-MM-DDTHH:MM:SS
+        page (int): Page number (default: 0)
+        size (int): Page size (default: 20)
+        order_by (str): Field to order by (default: "id")
+        sort_order (str): "asc" or "desc" (default: "desc")
+        search (str, optional): Search term
+        auth_service (SupplyAuthService, optional): Auth service instance.
+                                                   If not provided, a new one will be created.
+
+    Returns:
+        Tuple[bool, Dict[str, Any]]: (success, facturas data)
+    """
+    # Get auth service if not provided
+    if not auth_service:
+        auth_service = get_auth_service()
+
+    # Validate direction
+    if direction not in ["incoming", "outgoing"]:
+        error_msg = "Direction must be 'incoming' or 'outgoing'"
+        logger.error(error_msg)
+        return False, {"error": error_msg}
+
+    # Validate required fields
+    if not tin:
+        error_msg = "TIN is required"
+        logger.error(error_msg)
+        return False, {"error": error_msg}
+
+    # Build URL
+    endpoint = FACTURA_INCOMING_ENDPOINT if direction == "incoming" else FACTURA_OUTGOING_ENDPOINT
+    url = f"{BASE_URL}{endpoint}?tin={tin}&page={page}&size={size}"
+
+    # Add optional parameters
+    if from_date:
+        url += f"&from={from_date}"
+
+    if to_date:
+        url += f"&to={to_date}"
+
+    if status:
+        url += f"&status={status}"
+
+    if order_by:
+        url += f"&orderBy={order_by}"
+
+    if sort_order:
+        url += f"&sortOrder={sort_order}"
+
+    if search:
+        url += f"&search={search}"
+
+    # Set headers
+    headers = {
+        "Content-Type": "application/json",
+        **auth_service.get_auth_header()
+    }
+
+    try:
+        # Make the request
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+
+        # Process response
+        facturas_data = response.json()
+        return True, facturas_data
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching facturas from Supply API: {str(e)}")
+        return False, {"error": str(e)}
+
+
+def get_waybills(
+        tin: str,
+        direction: str = "incoming",
+        status: Optional[str] = None,
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+        page: int = 0,
+        size: int = 20,
+        search: Optional[str] = None,
+        auth_service: Optional[SupplyAuthService] = None
+) -> Tuple[bool, Dict[str, Any]]:
+    """
+    Endpoint 7: Get waybills (TTNs) from Supply.
+
+    Args:
+        tin (str): TIN of the company
+        direction (str): "incoming" or "outgoing"
+        status (str, optional): Filter by status (DRAFT, ConsignorSent, etc.)
+        from_date (str, optional): Start date in format YYYY-MM-DDTHH:MM:SS
+        to_date (str, optional): End date in format YYYY-MM-DDTHH:MM:SS
+        page (int): Page number (default: 0)
+        size (int): Page size (default: 20)
+        search (str, optional): Search term
+        auth_service (SupplyAuthService, optional): Auth service instance.
+                                                   If not provided, a new one will be created.
+
+    Returns:
+        Tuple[bool, Dict[str, Any]]: (success, waybills data)
+    """
+    # Get auth service if not provided
+    if not auth_service:
+        auth_service = get_auth_service()
+
+    # Validate direction
+    if direction not in ["incoming", "outgoing"]:
+        error_msg = "Direction must be 'incoming' or 'outgoing'"
+        logger.error(error_msg)
+        return False, {"error": error_msg}
+
+    # Validate required fields
+    if not tin:
+        error_msg = "TIN is required"
+        logger.error(error_msg)
+        return False, {"error": error_msg}
+
+    # Build URL
+    endpoint = WAYBILL_INCOMING_ENDPOINT if direction == "incoming" else WAYBILL_OUTGOING_ENDPOINT
+    url = f"{BASE_URL}{endpoint}?tin={tin}&page={page}&size={size}"
+
+    # Add optional parameters
+    if from_date:
+        url += f"&from={from_date}"
+
+    if to_date:
+        url += f"&to={to_date}"
+
+    if status:
+        url += f"&status={status}"
+
+    if search:
+        url += f"&search={search}"
+
+    # Set headers
+    headers = {
+        "Content-Type": "application/json",
+        **auth_service.get_auth_header()
+    }
+
+    try:
+        # Make the request
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+
+        # Process response
+        waybills_data = response.json()
+        return True, waybills_data
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching waybills from Supply API: {str(e)}")
+        return False, {"error": str(e)}
+
+
+def prepare_order_data_from_nomenclature(nomenclature):
+    """
+    Prepares order data for Supply API from a Nomenclature object.
+
+    Args:
+        nomenclature (Nomenclature): The nomenclature object to convert
+
+    Returns:
+        dict: Order data formatted for the Supply API
+    """
+    try:
+        # Parse the contract information
+        contract_data = json.loads(nomenclature.contract) if isinstance(nomenclature.contract,
+                                                                        str) else nomenclature.contract
+
+        # Get all products for this nomenclature
+        products = nomenclature.products.all()
+
+        # Format products for the order
+        order_products = []
+        for product in products:
+            product_data = {
+                "name": product.name,
+                "code": product.code,
+                "serial": product.code,
+                "barcode": product.barcode,
+                "count": product.count,
+                "baseSumma": product.summa,
+                "catalogCode": product.catalog_code,
+                "packageCode": product.package_code,
+                "profitRate": 0,
+                "summa": product.summa,
+                "deliverySum": product.delivery_sum
+            }
+            order_products.append(product_data)
+
+        # Construct the order data
+        order_data = {
+            "branchId": "GLOBAL",
+            "customerTin": nomenclature.customer_tin,
+            "orderDate": nomenclature.date.isoformat() if nomenclature.date else None,
+            "contract": contract_data,
+            "orderNumber": nomenclature.external_id,
+            "products": order_products
+        }
+
+        return order_data
+
+    except Exception as e:
+        logger.error(f"Error preparing order data from nomenclature {nomenclature.id}: {str(e)}")
+        raise Exception(f"Failed to prepare order data: {str(e)}")
+
+
+# New constants for endpoints 8 and 9
+RECEIPT_ENDPOINT = "/api/integration/v1/1C/receipt"
+PRODUCT_QTY_ENDPOINT = "/api/integration/v1/1C/product-qty"
+
+
+def get_receipts(
+        tin: str,
+        from_date: str,
+        to_date: str,
+        status: str = "PAID",
+        page: int = 0,
+        size: int = 20,
+        search: Optional[str] = None,
+        auth_service: Optional[SupplyAuthService] = None
+) -> Tuple[bool, Dict[str, Any]]:
+    """
+    Endpoint 8: Get receipts from Supply.
+
+    Args:
+        tin (str): TIN of the company
+        from_date (str): Start date in format YYYY-MM-DDTHH:MM:SS
+        to_date (str): End date in format YYYY-MM-DDTHH:MM:SS
+        status (str): Filter by status (DRAFT, PAID, RETURNED)
+        page (int): Page number (default: 0)
+        size (int): Page size (default: 20)
+        search (str, optional): Search term
+        auth_service (SupplyAuthService, optional): Auth service instance.
+                                                   If not provided, a new one will be created.
+
+    Returns:
+        Tuple[bool, Dict[str, Any]]: (success, receipts data)
+    """
+    # Get auth service if not provided
+    if not auth_service:
+        auth_service = get_auth_service()
+
+    # Validate required fields
+    if not tin:
+        error_msg = "TIN is required"
+        logger.error(error_msg)
+        return False, {"error": error_msg}
+
+    if not from_date or not to_date:
+        error_msg = "Both from_date and to_date are required"
+        logger.error(error_msg)
+        return False, {"error": error_msg}
+
+    # Validate status
+    valid_statuses = ["DRAFT", "PAID", "RETURNED"]
+    if status and status not in valid_statuses:
+        error_msg = f"Status must be one of: {', '.join(valid_statuses)}"
+        logger.error(error_msg)
+        return False, {"error": error_msg}
+
+    # Build URL
+    url = f"{BASE_URL}{RECEIPT_ENDPOINT}?tin={tin}&page={page}&size={size}"
+
+    # Add required parameters
+    url += f"&from={from_date}&to={to_date}&status={status}"
+
+    # Add optional search parameter
+    if search:
+        url += f"&search={search}"
+
+    # Set headers
+    headers = {
+        "Content-Type": "application/json",
+        **auth_service.get_auth_header()
+    }
+
+    try:
+        # Make the request
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+
+        # Process response
+        receipts_data = response.json()
+        return True, receipts_data
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching receipts from Supply API: {str(e)}")
+        return False, {"error": str(e)}
+
+
+def get_product_qty(
+        branch_id: int,
+        warehouse_id: int,
+        auth_service: Optional[SupplyAuthService] = None
+) -> Tuple[bool, Dict[str, Any]]:
+    """
+    Endpoint 9: Get product quantities in warehouse.
+
+    Args:
+        branch_id (int): ID of the branch
+        warehouse_id (int): ID of the warehouse
+        auth_service (SupplyAuthService, optional): Auth service instance.
+                                                   If not provided, a new one will be created.
+
+    Returns:
+        Tuple[bool, Dict[str, Any]]: (success, product quantities data)
+    """
+    # Get auth service if not provided
+    if not auth_service:
+        auth_service = get_auth_service()
+
+    # Validate required fields
+    if not branch_id:
+        error_msg = "branch_id is required"
+        logger.error(error_msg)
+        return False, {"error": error_msg}
+
+    if not warehouse_id:
+        error_msg = "warehouse_id is required"
+        logger.error(error_msg)
+        return False, {"error": error_msg}
+
+    # Build URL
+    url = f"{BASE_URL}{PRODUCT_QTY_ENDPOINT}?branchId={branch_id}&warehouseId={warehouse_id}"
+
+    # Set headers
+    headers = {
+        "Content-Type": "application/json",
+        **auth_service.get_auth_header()
+    }
+
+    try:
+        # Make the request
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+
+        # Process response
+        product_qty_data = response.json()
+        return True, product_qty_data
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching product quantities from Supply API: {str(e)}")
+        return False, {"error": str(e)}
